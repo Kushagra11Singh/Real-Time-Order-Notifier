@@ -1,28 +1,3 @@
-"""
-Redis Pub/Sub broker.
-
-Why Redis here and not broadcasting directly from the DB listener?
-
-If this service runs as a single process, you could skip Redis entirely —
-the asyncpg NOTIFY callback could just call manager.broadcast() directly.
-
-But in any real deployment you'll run multiple instances behind a load
-balancer (horizontal scaling, rolling deploys, blue-green).  Each instance
-has its own asyncpg listener connection and its own WebSocket connections.
-Instance A picks up the DB NOTIFY; Instance B's clients don't hear about it.
-
-Redis Pub/Sub is the decoupling layer: every instance publishes to Redis
-and every instance subscribes.  One DB change → Redis fans it out to all
-running instances → all connected WebSocket clients are notified.
-
-Why Redis Pub/Sub and not Kafka?
-Kafka would be the right call if we needed durable, replayable event
-streams (e.g. audit logs, event sourcing).  Here the source of truth is
-PostgreSQL — a missed event is recoverable via a REST query.  Redis
-Pub/Sub is fire-and-forget, in-memory, and has sub-millisecond latency
-for this fan-out pattern.  Simpler operational footprint for the same job.
-"""
-
 import asyncio
 import logging
 

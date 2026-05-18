@@ -1,16 +1,3 @@
-"""
-pytest configuration and shared fixtures.
-
-Run the full suite:
-    pytest tests/ -v
-
-Run only the fast unit tests (no DB/Redis needed):
-    pytest tests/test_connection_manager.py -v
-
-Run the API integration tests (requires a running server):
-    pytest tests/test_orders_api.py -v
-"""
-
 import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock

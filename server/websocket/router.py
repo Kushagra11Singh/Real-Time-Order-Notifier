@@ -1,12 +1,3 @@
-"""
-WebSocket router + Redis subscriber.
-
-The Redis subscriber coroutine runs as a background asyncio task (started
-from main.py lifespan).  It listens on the Redis channel and calls
-manager.broadcast() for every message, which fans out to all connected
-WebSocket clients that pass their filter.
-"""
-
 import asyncio
 import json
 import logging

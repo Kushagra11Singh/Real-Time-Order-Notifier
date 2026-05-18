@@ -3,20 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Realtime Order Notifier</title>
+  <title>Order Feed — Realtime Notifier</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:       #0f1117;
-      --surface:  #1a1d26;
-      --border:   #2a2d3a;
-      --text:     #e2e4ed;
-      --muted:    #6b7080;
-      --accent:   #4f8ef7;
-      --green:    #34c77b;
-      --yellow:   #f5a623;
-      --red:      #e05c5c;
+      --bg:        #0f1117;
+      --surface:   #1a1d26;
+      --surface2:  #21253200;
+      --border:    #2a2d3a;
+      --text:      #e2e4ed;
+      --muted:     #6b7080;
+      --accent:    #4f8ef7;
+      --green:     #34c77b;
+      --yellow:    #f5a623;
+      --red:       #e05c5c;
       --insert-hl: rgba(52, 199, 123, 0.12);
       --update-hl: rgba(79, 142, 247, 0.12);
       --delete-hl: rgba(224, 92, 92, 0.12);
@@ -74,7 +75,7 @@
 
     @keyframes pulse {
       0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
+      50%       { opacity: 0.3; }
     }
 
     main {
@@ -92,16 +93,9 @@
       flex-wrap: wrap;
     }
 
-    .top-bar h1 {
-      font-size: 20px;
-      font-weight: 600;
-    }
+    .top-bar h1 { font-size: 20px; font-weight: 600; }
 
-    .controls {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
+    .controls { display: flex; gap: 10px; flex-wrap: wrap; }
 
     input, select {
       background: var(--surface);
@@ -128,11 +122,23 @@
       transition: opacity 0.2s;
     }
 
-    button:hover { opacity: 0.85; }
+    button:hover       { opacity: 0.85; }
+    button:disabled    { opacity: 0.4; cursor: not-allowed; }
+
     button.secondary {
       background: var(--surface);
       color: var(--text);
       border: 1px solid var(--border);
+    }
+
+    button.danger {
+      background: var(--red);
+      color: #fff;
+    }
+
+    button.warn {
+      background: #c97d15;
+      color: #fff;
     }
 
     /* Stats row */
@@ -149,16 +155,17 @@
       border-radius: 8px;
       padding: 12px 18px;
       flex: 1;
-      min-width: 140px;
+      min-width: 130px;
     }
 
     .stat-card .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
     .stat-card .value { font-size: 22px; font-weight: 600; }
-    .stat-card .value.green { color: var(--green); }
+    .stat-card .value.green  { color: var(--green); }
     .stat-card .value.yellow { color: var(--yellow); }
-    .stat-card .value.blue  { color: var(--accent); }
+    .stat-card .value.blue   { color: var(--accent); }
+    .stat-card .value.red    { color: var(--red); }
 
-    /* Event log */
+    /* Active orders */
     .panel-label {
       font-size: 11px;
       text-transform: uppercase;
@@ -167,6 +174,72 @@
       margin-bottom: 10px;
     }
 
+    #orders-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+      min-height: 60px;
+    }
+
+    .order-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      position: relative;
+      transition: border-color 0.3s, opacity 0.3s;
+    }
+
+    .order-card.flash-insert { animation: card-insert 1.5s ease-out; }
+    .order-card.flash-update { animation: card-update 1.5s ease-out; }
+    .order-card.removing     { animation: card-remove 0.4s ease-out forwards; }
+
+    @keyframes card-insert { 0% { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); } 100% { border-color: var(--border); } }
+    @keyframes card-update { 0% { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); } 100% { border-color: var(--border); } }
+    @keyframes card-remove { 0% { opacity: 1; transform: scale(1); } 100% { opacity: 0; transform: scale(0.95); } }
+
+    .card-id    { font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+    .card-name  { font-weight: 600; font-size: 14px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .card-product { font-size: 12px; color: var(--muted); margin-bottom: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .card-footer { display: flex; align-items: center; justify-content: space-between; }
+
+    .status-pill {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 3px 8px;
+      border-radius: 20px;
+      text-transform: uppercase;
+    }
+
+    .pill-pending   { background: rgba(245,166,35,0.15);  color: var(--yellow); }
+    .pill-shipped   { background: rgba(79,142,247,0.15);  color: var(--accent); }
+    .pill-delivered { background: rgba(52,199,123,0.15);  color: var(--green); }
+
+    .card-del-btn {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 15px;
+      padding: 2px 4px;
+      line-height: 1;
+      border-radius: 4px;
+      transition: color 0.2s, background 0.2s;
+    }
+
+    .card-del-btn:hover { color: var(--red); background: rgba(224,92,92,0.12); opacity: 1; }
+
+    .orders-empty {
+      color: var(--muted);
+      font-size: 13px;
+      padding: 8px 0;
+    }
+
+    /* Event log */
     #event-log {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -177,7 +250,7 @@
 
     .log-header {
       display: grid;
-      grid-template-columns: 90px 70px 1fr 1fr 100px 80px;
+      grid-template-columns: 80px 70px 1fr 1fr 100px 60px;
       gap: 12px;
       padding: 8px 16px;
       font-size: 11px;
@@ -187,16 +260,15 @@
       border-bottom: 1px solid var(--border);
     }
 
-    .log-rows { max-height: 360px; overflow-y: auto; }
+    .log-rows { max-height: 230px; overflow-y: auto; }
 
     .log-row {
       display: grid;
-      grid-template-columns: 90px 70px 1fr 1fr 100px 80px;
+      grid-template-columns: 80px 70px 1fr 1fr 100px 60px;
       gap: 12px;
       padding: 9px 16px;
       border-bottom: 1px solid var(--border);
       font-size: 13px;
-      transition: background 1.2s ease-out;
       align-items: center;
     }
 
@@ -206,18 +278,9 @@
     .log-row.new-update { animation: flash-update 1.5s ease-out; }
     .log-row.new-delete { animation: flash-delete 1.5s ease-out; }
 
-    @keyframes flash-insert {
-      0%   { background: var(--insert-hl); }
-      100% { background: transparent; }
-    }
-    @keyframes flash-update {
-      0%   { background: var(--update-hl); }
-      100% { background: transparent; }
-    }
-    @keyframes flash-delete {
-      0%   { background: var(--delete-hl); }
-      100% { background: transparent; }
-    }
+    @keyframes flash-insert { 0% { background: var(--insert-hl); } 100% { background: transparent; } }
+    @keyframes flash-update { 0% { background: var(--update-hl); } 100% { background: transparent; } }
+    @keyframes flash-delete { 0% { background: var(--delete-hl); } 100% { background: transparent; } }
 
     .badge {
       display: inline-block;
@@ -236,7 +299,7 @@
     .status-pending   { color: var(--yellow); }
     .status-shipped   { color: var(--accent); }
     .status-delivered { color: var(--green); }
-    .status-deleted   { color: var(--red); text-decoration: line-through; }
+    .status-deleted   { color: var(--red); font-style: italic; }
 
     .ts { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 
@@ -246,27 +309,48 @@
       color: var(--muted);
     }
 
-    /* Create order form */
+    /* Form panels */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 0;
+    }
+
+    @media (max-width: 640px) { .form-grid { grid-template-columns: 1fr; } }
+
     .form-panel {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 20px 24px;
+      padding: 18px 20px;
+    }
+
+    .form-panel h3 {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: var(--text);
     }
 
     .form-row {
       display: flex;
-      gap: 10px;
+      gap: 8px;
       flex-wrap: wrap;
     }
 
-    .form-row input, .form-row select {
-      flex: 1;
-      min-width: 160px;
+    .form-row input, .form-row select { flex: 1; min-width: 130px; }
+    .form-row button                   { flex-shrink: 0; }
+
+    .divider-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin: 20px 0 10px;
     }
 
-    .form-row button { flex-shrink: 0; }
-
+    /* Toast */
     .toast-container {
       position: fixed;
       bottom: 24px;
@@ -284,12 +368,15 @@
       border-radius: 6px;
       padding: 10px 16px;
       font-size: 13px;
-      max-width: 320px;
+      max-width: 300px;
       animation: slide-in 0.25s ease-out, fade-out 0.3s ease-in 3.7s forwards;
     }
 
-    @keyframes slide-in  { from { transform: translateX(20px); opacity: 0; } to { transform: none; opacity: 1; } }
-    @keyframes fade-out  { from { opacity: 1; } to { opacity: 0; pointer-events: none; } }
+    .toast.toast-delete { border-left-color: var(--red); }
+    .toast.toast-insert { border-left-color: var(--green); }
+
+    @keyframes slide-in { from { transform: translateX(20px); opacity: 0; } to { transform: none; opacity: 1; } }
+    @keyframes fade-out { from { opacity: 1; } to { opacity: 0; pointer-events: none; } }
 
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -314,6 +401,7 @@
     </div>
   </div>
 
+  <!-- Stats -->
   <div class="stats">
     <div class="stat-card">
       <div class="label">Total Events</div>
@@ -329,7 +417,11 @@
     </div>
     <div class="stat-card">
       <div class="label">Deletes</div>
-      <div class="value" style="color:var(--red)" id="stat-delete">0</div>
+      <div class="value red" id="stat-delete">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Active Orders</div>
+      <div class="value yellow" id="stat-active">0</div>
     </div>
     <div class="stat-card">
       <div class="label">Avg Latency</div>
@@ -337,8 +429,24 @@
     </div>
   </div>
 
-  <div class="panel-label">Event Log</div>
+  <!-- Live orders grid -->
+<div class="panel-label">
+  Active Orders
+  <span id="orders-count" style="color:var(--muted);font-size:10px;margin-left:6px;"></span>
+</div>
 
+<div id="orders-grid">
+  <span class="orders-empty" id="orders-empty">Loading orders…</span>
+</div>
+
+<div id="orders-toggle-wrapper" style="display:none; margin-bottom:24px;">
+  <button class="secondary" id="toggle-orders-btn">
+    Show More Orders
+  </button>
+</div>
+
+  <!-- Event log -->
+  <div class="panel-label">Event Log</div>
   <div id="event-log">
     <div class="log-header">
       <span>Time</span>
@@ -349,24 +457,48 @@
       <span>ID</span>
     </div>
     <div class="log-rows" id="log-rows">
-      <div class="empty-state" id="empty-msg">
-        Waiting for events…
-      </div>
+      <div class="empty-state" id="empty-msg">Waiting for events…</div>
     </div>
   </div>
 
-  <div class="panel-label">Create a Test Order</div>
-  <div class="form-panel">
-    <div class="form-row">
-      <input id="inp-customer" type="text" placeholder="Customer name" value="Rohan Mehta" />
-      <input id="inp-product"  type="text" placeholder="Product name"  value="Mechanical Keyboard" />
-      <select id="inp-status">
-        <option value="pending">pending</option>
-        <option value="shipped">shipped</option>
-        <option value="delivered">delivered</option>
-      </select>
-      <button id="btn-create">Create Order</button>
+  <!-- Action panels -->
+  <div class="divider-label">Actions</div>
+  <div class="form-grid">
+
+    <div class="form-panel">
+      <h3>➕ Create Order</h3>
+      <div class="form-row">
+        <input id="inp-customer" type="text" placeholder="Customer name" value="Rohan Mehta" />
+        <input id="inp-product"  type="text" placeholder="Product name"  value="Mechanical Keyboard" />
+        <select id="inp-status">
+          <option value="pending">pending</option>
+          <option value="shipped">shipped</option>
+          <option value="delivered">delivered</option>
+        </select>
+        <button id="btn-create">Create</button>
+      </div>
     </div>
+
+    <div class="form-panel">
+      <h3>🗑️ Delete Order</h3>
+      <div class="form-row">
+        <input id="inp-delete-id" type="number" placeholder="Order ID" min="1" />
+        <button class="danger" id="btn-delete">Delete</button>
+      </div>
+      <div style="margin-top:10px;">
+        <h3 style="margin-bottom:8px;">✏️ Update Status</h3>
+        <div class="form-row">
+          <input id="inp-update-id" type="number" placeholder="Order ID" min="1" />
+          <select id="inp-update-status">
+            <option value="pending">pending</option>
+            <option value="shipped">shipped</option>
+            <option value="delivered">delivered</option>
+          </select>
+          <button class="warn" id="btn-update">Update</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </main>
 
@@ -385,6 +517,11 @@
   let deleteCount = 0;
   let latencies   = [];
 
+  // Live order tracking: Map<orderId (number), cardElement>
+  const activeOrders = new Map();
+  let showAllOrders = false;
+  const MAX_VISIBLE_ORDERS = 4;
+
   // ── WebSocket with exponential-backoff reconnection ──────────────
   function connect() {
     setStatus('reconnecting', 'Connecting…');
@@ -393,12 +530,12 @@
     ws.onopen = () => {
       reconnectDelay = 1000;
       setStatus('connected', 'Connected');
-      toast('Connected to order feed');
+      toast('Connected to order feed', 'insert');
     };
 
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);
-      if (msg.type === 'connected') return; // ack frame
+      if (msg.type === 'connected') return;
       handleEvent(msg);
     };
 
@@ -407,8 +544,131 @@
     ws.onclose = () => {
       setStatus('disconnected', `Reconnecting in ${(reconnectDelay / 1000).toFixed(0)}s…`);
       setTimeout(connect, reconnectDelay);
-      reconnectDelay = Math.min(reconnectDelay * 2, 16000);
+      reconnectDelay = Math.min(reconnectDelay * 2, 30000);
     };
+  }
+
+  // ── Load current orders on startup ──────────────────────────────
+  async function loadInitialOrders() {
+    try {
+      const res = await fetch(API_BASE + '/');
+      if (!res.ok) return;
+      const orders = await res.json();
+      const empty = document.getElementById('orders-empty');
+      if (orders.length === 0) {
+        if (empty) empty.textContent = 'No active orders — create one below.';
+        return;
+      }
+      if (empty) empty.remove();
+      // Render in reverse so newest is first (API returns DESC already)
+      orders.forEach(order => renderOrderCard(order, null));
+      updateActiveCount();
+    } catch (_) {
+      const empty = document.getElementById('orders-empty');
+      if (empty) empty.textContent = 'Could not load orders.';
+    }
+  }
+
+  // ── Render / update / remove order cards ────────────────────────
+  function renderOrderCard(data, flashClass) {
+    const grid = document.getElementById('orders-grid');
+    const empty = document.getElementById('orders-empty');
+    if (empty) empty.remove();
+
+    if (activeOrders.has(data.id)) {
+      // Update existing card
+      const card = activeOrders.get(data.id);
+      card.querySelector('.card-name').textContent    = data.customer_name;
+      card.querySelector('.card-product').textContent = data.product_name;
+      const pill = card.querySelector('.status-pill');
+      pill.className = `status-pill pill-${data.status}`;
+      pill.textContent = data.status;
+      if (flashClass) {
+        card.classList.remove('flash-insert', 'flash-update');
+        void card.offsetWidth; // reflow to restart animation
+        card.classList.add(flashClass);
+      }
+      refreshOrderVisibility();
+    } else {
+      // New card
+      const card = document.createElement('div');
+      card.className = `order-card${flashClass ? ' ' + flashClass : ''}`;
+      card.dataset.orderId = data.id;
+      card.innerHTML = `
+        <div class="card-id">Order #${data.id}</div>
+        <div class="card-name">${escHtml(data.customer_name)}</div>
+        <div class="card-product">${escHtml(data.product_name)}</div>
+        <div class="card-footer">
+          <span class="status-pill pill-${data.status}">${data.status}</span>
+          <button class="card-del-btn" title="Delete this order" data-id="${data.id}">✕</button>
+        </div>
+      `;
+      card.querySelector('.card-del-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteOrder(data.id);
+      });
+      grid.prepend(card);
+      activeOrders.set(data.id, card);
+      refreshOrderVisibility();
+    }
+
+    updateActiveCount();
+  }
+
+  function refreshOrderVisibility() {
+  const grid = document.getElementById('orders-grid');
+  const cards = [...grid.querySelectorAll('.order-card')];
+  const toggleWrapper = document.getElementById('orders-toggle-wrapper');
+  const toggleBtn = document.getElementById('toggle-orders-btn');
+
+  if (cards.length <= MAX_VISIBLE_ORDERS) {
+    toggleWrapper.style.display = 'none';
+    cards.forEach(card => card.style.display = 'block');
+    return;
+  }
+
+  toggleWrapper.style.display = 'block';
+
+  cards.forEach((card, index) => {
+    if (showAllOrders || index < MAX_VISIBLE_ORDERS) {
+      card.style.display = 'block';
+    } else {
+      card.style.display = 'none';
+    }
+  });
+
+  toggleBtn.textContent = showAllOrders
+    ? 'Show Less Orders'
+    : `Show ${cards.length - MAX_VISIBLE_ORDERS} More Orders`;
+}
+
+  function removeOrderCard(orderId) {
+    const card = activeOrders.get(orderId);
+    if (!card) return;
+    card.classList.add('removing');
+    setTimeout(() => {
+      card.remove();
+      activeOrders.delete(orderId);
+      updateActiveCount();
+      refreshOrderVisibility();
+      // Show empty state if nothing left
+      if (activeOrders.size === 0) {
+        const grid = document.getElementById('orders-grid');
+        if (!document.getElementById('orders-empty')) {
+          const empty = document.createElement('span');
+          empty.className = 'orders-empty';
+          empty.id = 'orders-empty';
+          empty.textContent = 'No active orders — create one below.';
+          grid.appendChild(empty);
+        }
+      }
+    }, 420);
+  }
+
+  function updateActiveCount() {
+    document.getElementById('stat-active').textContent = activeOrders.size;
+    const label = document.getElementById('orders-count');
+    if (label) label.textContent = activeOrders.size > 0 ? `(${activeOrders.size})` : '';
   }
 
   // ── Handle incoming change event ─────────────────────────────────
@@ -416,10 +676,10 @@
     const { event, data, server_received_at } = msg;
     if (!event || !data) return;
 
-    // Track latency (ms from DB NOTIFY pickup to client receipt)
+    // Track latency
     if (server_received_at) {
       const latencyMs = (Date.now() / 1000 - server_received_at) * 1000;
-      if (latencyMs < 5000) {   // ignore stale events from reconnects
+      if (latencyMs >= 0 && latencyMs < 10000) {
         latencies.push(latencyMs);
         if (latencies.length > 50) latencies.shift();
         const avg = latencies.reduce((a, b) => a + b, 0) / latencies.length;
@@ -438,40 +698,59 @@
     document.getElementById('stat-update').textContent = updateCount;
     document.getElementById('stat-delete').textContent = deleteCount;
 
-    // Remove empty-state placeholder
+    // Update live order card
+    if (event === 'INSERT') {
+      renderOrderCard(data, 'flash-insert');
+    } else if (event === 'UPDATE') {
+      renderOrderCard(data, 'flash-update');
+    } else if (event === 'DELETE') {
+      removeOrderCard(data.id);
+    }
+
+    // Add event log row
     const empty = document.getElementById('empty-msg');
     if (empty) empty.remove();
 
-    // Build row
     const row = document.createElement('div');
     row.className = `log-row new-${event.toLowerCase()}`;
 
     const now = new Date();
     const ts  = now.toTimeString().split(' ')[0];
 
-    const statusClass = event === 'DELETE'
-      ? 'status-deleted'
-      : `status-${data.status}`;
+    const statusText  = event === 'DELETE' ? 'deleted' : (data.status ?? '—');
+    const statusClass = event === 'DELETE' ? 'status-deleted' : `status-${data.status}`;
 
     row.innerHTML = `
       <span class="ts">${ts}</span>
       <span><span class="badge badge-${event}">${event}</span></span>
       <span>${escHtml(data.customer_name ?? '—')}</span>
       <span>${escHtml(data.product_name  ?? '—')}</span>
-      <span class="${statusClass}">${escHtml(data.status ?? 'deleted')}</span>
+      <span class="${statusClass}">${escHtml(statusText)}</span>
       <span class="ts">#${data.id}</span>
     `;
 
     const rows = document.getElementById('log-rows');
     rows.prepend(row);
-
-    // Keep at most 200 rows in the DOM
     while (rows.children.length > 200) rows.removeChild(rows.lastChild);
 
-    toast(`${event} — Order #${data.id} · ${data.status ?? 'deleted'}`);
+    const toastType = event === 'DELETE' ? 'delete' : event === 'INSERT' ? 'insert' : '';
+    toast(`${event} — Order #${data.id} · ${statusText}`, toastType);
   }
 
-  // ── Create order ──────────────────────────────────────────────────
+  // ── API calls ─────────────────────────────────────────────────────
+  async function deleteOrder(orderId) {
+    if (!orderId) return;
+    try {
+      const res = await fetch(`${API_BASE}/${orderId}`, { method: 'DELETE' });
+      if (res.status === 404) { toast(`Order #${orderId} not found.`, 'delete'); return; }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // The WS event will handle the card removal; no need to do it here.
+    } catch (err) {
+      toast(`Delete failed: ${err.message}`, 'delete');
+    }
+  }
+
+  // Create order
   document.getElementById('btn-create').addEventListener('click', async () => {
     const body = {
       customer_name: document.getElementById('inp-customer').value.trim() || 'Anonymous',
@@ -486,11 +765,36 @@
       });
       if (!res.ok) throw new Error(await res.text());
     } catch (err) {
-      toast(`Error: ${err.message}`, true);
+      toast(`Create failed: ${err.message}`, 'delete');
     }
   });
 
-  // ── Clear log ─────────────────────────────────────────────────────
+  // Delete order via form
+  document.getElementById('btn-delete').addEventListener('click', () => {
+    const id = parseInt(document.getElementById('inp-delete-id').value, 10);
+    if (!id || id < 1) { toast('Enter a valid order ID.', 'delete'); return; }
+    deleteOrder(id);
+  });
+
+  // Update order status
+  document.getElementById('btn-update').addEventListener('click', async () => {
+    const id     = parseInt(document.getElementById('inp-update-id').value, 10);
+    const status = document.getElementById('inp-update-status').value;
+    if (!id || id < 1) { toast('Enter a valid order ID.', 'delete'); return; }
+    try {
+      const res = await fetch(`${API_BASE}/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (res.status === 404) { toast(`Order #${id} not found.`, 'delete'); return; }
+      if (!res.ok) throw new Error(await res.text());
+    } catch (err) {
+      toast(`Update failed: ${err.message}`, 'delete');
+    }
+  });
+
+  // Clear log
   document.getElementById('btn-clear').addEventListener('click', () => {
     const rows = document.getElementById('log-rows');
     rows.innerHTML = '<div class="empty-state" id="empty-msg">Waiting for events…</div>';
@@ -503,17 +807,21 @@
     document.getElementById('stat-latency').textContent = '—';
   });
 
+  document.getElementById('toggle-orders-btn').addEventListener('click', () => {
+  showAllOrders = !showAllOrders;
+  refreshOrderVisibility();
+});
+
   // ── Helpers ───────────────────────────────────────────────────────
   function setStatus(state, text) {
-    document.getElementById('status-dot').className  = state;
+    document.getElementById('status-dot').className    = state;
     document.getElementById('status-text').textContent = text;
   }
 
-  function toast(message, isError = false) {
+  function toast(message, type = '') {
     const container = document.getElementById('toast-container');
     const el = document.createElement('div');
-    el.className = 'toast';
-    if (isError) el.style.borderLeftColor = 'var(--red)';
+    el.className = `toast${type ? ' toast-' + type : ''}`;
     el.textContent = message;
     container.appendChild(el);
     setTimeout(() => el.remove(), 4200);
@@ -527,6 +835,7 @@
   }
 
   // ── Boot ──────────────────────────────────────────────────────────
+  loadInitialOrders();
   connect();
 </script>
 </body>

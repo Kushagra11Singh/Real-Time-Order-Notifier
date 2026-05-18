@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+
 """
 simulate.py — Seeds the database and simulates a realistic order lifecycle.
 
@@ -128,7 +128,7 @@ async def run(base_url: str, seed_only: bool) -> None:
                 tasks = [advance_order(client, base_url, o) for o in orders_to_advance]
                 await asyncio.sleep(random.uniform(1, 3))
                 await delete_order(client, base_url, cancel_target["id"])
-            
+
             await asyncio.gather(*tasks)
             pause = random.uniform(5, 10)
             print(f"\n  Sleeping {pause:.0f}s before next round…")

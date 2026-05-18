@@ -1,20 +1,3 @@
-"""
-Integration tests for the Orders REST API.
-
-These tests require the server to be running (locally or in Docker).
-They use real HTTP requests via httpx — no mocking of the DB or Redis.
-
-Usage:
-    # With default server at localhost:8000
-    pytest tests/test_orders_api.py -v
-
-    # Against a different host
-    PYTEST_BASE_URL=http://localhost:8000 pytest tests/test_orders_api.py -v
-
-Each test creates its own order(s) and cleans up after itself so tests
-are independent and can run in any order.
-"""
-
 import pytest
 import httpx
 

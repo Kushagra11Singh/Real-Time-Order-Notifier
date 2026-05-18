@@ -1,11 +1,3 @@
-"""
-Unit tests for ConnectionManager._passes_filter().
-
-These tests are fully self-contained — no DB, no Redis, no running server.
-They exercise the per-client subscription filter logic that decides whether
-a given change event should be forwarded to a specific WebSocket client.
-"""
-
 import pytest
 import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock

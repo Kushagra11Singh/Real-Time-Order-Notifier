@@ -1,24 +1,41 @@
-"""
-Orders REST API.
-
-Standard CRUD endpoints.  Creating or updating an order here will
-automatically trigger a NOTIFY from PostgreSQL, which flows through the
-pipeline and reaches all connected WebSocket clients — no explicit push
-code needed in these handlers.
-"""
 
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, field_validator
 
 from db.connection import get_pool
 
 logger = logging.getLogger(__name__)
+
+# Separate logger for audit events — makes it easy to route to a different
+# handler (file, external SIEM, etc.) without touching the app logger config.
+audit_logger = logging.getLogger("audit")
+
 orders_router = APIRouter()
 
 VALID_STATUSES = {"pending", "shipped", "delivered"}
+
+
+# ── Helpers ────────────────────────────────────────────────────────
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _audit(event: str, order_id: int, request_id: str, extra: dict | None = None) -> None:
+    """Emit a structured audit log entry.
+
+    Format is kept as a flat dict for easy parsing by log aggregators.
+    Example output:
+        AUDIT | ORDER_CREATED | order_id=12 | request_id=abc-123 | status=pending
+    """
+    parts = [f"order_id={order_id}", f"request_id={request_id}"]
+    if extra:
+        parts.extend(f"{k}={v}" for k, v in extra.items())
+    audit_logger.info("AUDIT | %s | %s | timestamp=%s", event, " | ".join(parts), _now_iso())
 
 
 # ── Pydantic models ────────────────────────────────────────────────
@@ -75,7 +92,8 @@ async def get_order(order_id: int):
 
 
 @orders_router.post("/", status_code=201)
-async def create_order(payload: OrderCreate):
+async def create_order(payload: OrderCreate, request: Request):
+    request_id = getattr(request.state, "request_id", "—")
     pool = get_pool()
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
@@ -88,12 +106,19 @@ async def create_order(payload: OrderCreate):
             payload.product_name,
             payload.status,
         )
-    logger.info("Order created: id=%d", row["id"])
+    logger.info("Order created: id=%d customer=%s", row["id"], payload.customer_name)
+    _audit(
+        "ORDER_CREATED",
+        row["id"],
+        request_id,
+        {"customer": payload.customer_name, "product": payload.product_name, "status": payload.status},
+    )
     return dict(row)
 
 
 @orders_router.patch("/{order_id}")
-async def update_order(order_id: int, payload: OrderUpdate):
+async def update_order(order_id: int, payload: OrderUpdate, request: Request):
+    request_id = getattr(request.state, "request_id", "—")
     pool = get_pool()
 
     # Build the SET clause dynamically from provided fields only
@@ -125,14 +150,17 @@ async def update_order(order_id: int, payload: OrderUpdate):
         raise HTTPException(status_code=404, detail="Order not found")
 
     logger.info("Order updated: id=%d status=%s", row["id"], row["status"])
+    _audit("ORDER_UPDATED", order_id, request_id, dict(updates))
     return dict(row)
 
 
 @orders_router.delete("/{order_id}", status_code=204)
-async def delete_order(order_id: int):
+async def delete_order(order_id: int, request: Request):
+    request_id = getattr(request.state, "request_id", "—")
     pool = get_pool()
     async with pool.acquire() as conn:
         result = await conn.execute("DELETE FROM orders WHERE id = $1", order_id)
     if result == "DELETE 0":
         raise HTTPException(status_code=404, detail="Order not found")
     logger.info("Order deleted: id=%d", order_id)
+    _audit("ORDER_DELETED", order_id, request_id)

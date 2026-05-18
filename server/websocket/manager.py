@@ -1,21 +1,3 @@
-"""
-WebSocket Connection Manager.
-
-Tracks every active WebSocket connection by a unique connection ID.
-Supports optional per-client filters so a client can choose to receive
-only a subset of change events (e.g. a frontend page that only cares
-about one specific order, or only 'shipped' status transitions).
-
-Filter spec (passed as query params on connect):
-  ?order_id=42          — only events where data.id == 42
-  ?status=shipped       — only events where data.status == 'shipped'
-  Both params may be combined.  Omit both to receive all events.
-
-This models the subscription pattern used in real trading platforms where
-a portfolio view only subscribes to its own positions rather than the
-full order feed.
-"""
-
 import logging
 import uuid
 from dataclasses import dataclass, field

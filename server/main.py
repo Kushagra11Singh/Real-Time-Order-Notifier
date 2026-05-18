@@ -1,24 +1,10 @@
-"""
-Entry point.
-
-Startup sequence:
-  1. Initialise asyncpg connection pool → apply schema.sql idempotently
-  2. Connect to Redis
-  3. Launch DB listener (asyncpg LISTEN) as background task
-  4. Launch Redis subscriber (fan-out to WebSocket clients) as background task
-  5. Serve HTTP + WebSocket traffic
-
-Shutdown sequence:
-  1. Cancel background tasks (listener, subscriber)
-  2. Close DB pool and Redis connection
-"""
-
 import asyncio
 import logging
 import os
+import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -79,6 +65,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── Request ID middleware ──────────────────────────────────────────
+# Reads X-Request-ID from the incoming request (so callers can correlate
+# their logs with ours) or mints a new UUID if one wasn't provided.
+# The ID is echoed back in the response header and stored on request.state
+# so handlers can include it in their audit log entries.
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
+
 
 # ── Routers ────────────────────────────────────────────────────────
 app.include_router(orders_router, prefix="/api/orders", tags=["Orders"])
