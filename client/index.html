@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Realtime Order Notifier</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0f1117;
+      --surface:  #1a1d26;
+      --border:   #2a2d3a;
+      --text:     #e2e4ed;
+      --muted:    #6b7080;
+      --accent:   #4f8ef7;
+      --green:    #34c77b;
+      --yellow:   #f5a623;
+      --red:      #e05c5c;
+      --insert-hl: rgba(52, 199, 123, 0.12);
+      --update-hl: rgba(79, 142, 247, 0.12);
+      --delete-hl: rgba(224, 92, 92, 0.12);
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+
+    .logo {
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: var(--text);
+    }
+
+    .logo span { color: var(--accent); }
+
+    #status-badge {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    #status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      transition: background 0.3s;
+    }
+
+    #status-dot.connected    { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    #status-dot.reconnecting { background: var(--yellow); animation: pulse 1s infinite; }
+    #status-dot.disconnected { background: var(--red); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 24px;
+    }
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .top-bar h1 {
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    input, select {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 7px 12px;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus, select:focus { border-color: var(--accent); }
+
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 7px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    button:hover { opacity: 0.85; }
+    button.secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    /* Stats row */
+    .stats {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 18px;
+      flex: 1;
+      min-width: 140px;
+    }
+
+    .stat-card .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+    .stat-card .value { font-size: 22px; font-weight: 600; }
+    .stat-card .value.green { color: var(--green); }
+    .stat-card .value.yellow { color: var(--yellow); }
+    .stat-card .value.blue  { color: var(--accent); }
+
+    /* Event log */
+    .panel-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    #event-log {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+
+    .log-header {
+      display: grid;
+      grid-template-columns: 90px 70px 1fr 1fr 100px 80px;
+      gap: 12px;
+      padding: 8px 16px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .log-rows { max-height: 360px; overflow-y: auto; }
+
+    .log-row {
+      display: grid;
+      grid-template-columns: 90px 70px 1fr 1fr 100px 80px;
+      gap: 12px;
+      padding: 9px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      transition: background 1.2s ease-out;
+      align-items: center;
+    }
+
+    .log-row:last-child { border-bottom: none; }
+
+    .log-row.new-insert { animation: flash-insert 1.5s ease-out; }
+    .log-row.new-update { animation: flash-update 1.5s ease-out; }
+    .log-row.new-delete { animation: flash-delete 1.5s ease-out; }
+
+    @keyframes flash-insert {
+      0%   { background: var(--insert-hl); }
+      100% { background: transparent; }
+    }
+    @keyframes flash-update {
+      0%   { background: var(--update-hl); }
+      100% { background: transparent; }
+    }
+    @keyframes flash-delete {
+      0%   { background: var(--delete-hl); }
+      100% { background: transparent; }
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      padding: 2px 7px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .badge-INSERT  { background: rgba(52,199,123,0.15); color: var(--green); }
+    .badge-UPDATE  { background: rgba(79,142,247,0.15); color: var(--accent); }
+    .badge-DELETE  { background: rgba(224,92,92,0.15);  color: var(--red); }
+
+    .status-pending   { color: var(--yellow); }
+    .status-shipped   { color: var(--accent); }
+    .status-delivered { color: var(--green); }
+    .status-deleted   { color: var(--red); text-decoration: line-through; }
+
+    .ts { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--muted);
+    }
+
+    /* Create order form */
+    .form-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .form-row input, .form-row select {
+      flex: 1;
+      min-width: 160px;
+    }
+
+    .form-row button { flex-shrink: 0; }
+
+    .toast-container {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 200;
+    }
+
+    .toast {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      border-radius: 6px;
+      padding: 10px 16px;
+      font-size: 13px;
+      max-width: 320px;
+      animation: slide-in 0.25s ease-out, fade-out 0.3s ease-in 3.7s forwards;
+    }
+
+    @keyframes slide-in  { from { transform: translateX(20px); opacity: 0; } to { transform: none; opacity: 1; } }
+    @keyframes fade-out  { from { opacity: 1; } to { opacity: 0; pointer-events: none; } }
+
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">order<span>feed</span> · realtime</div>
+  <div id="status-badge">
+    <div id="status-dot"></div>
+    <span id="status-text">Connecting…</span>
+  </div>
+</header>
+
+<main>
+  <div class="top-bar">
+    <h1>Live Order Stream</h1>
+    <div class="controls">
+      <button class="secondary" id="btn-clear">Clear log</button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat-card">
+      <div class="label">Total Events</div>
+      <div class="value blue" id="stat-total">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Inserts</div>
+      <div class="value green" id="stat-insert">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Updates</div>
+      <div class="value" style="color:var(--accent)" id="stat-update">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Deletes</div>
+      <div class="value" style="color:var(--red)" id="stat-delete">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Avg Latency</div>
+      <div class="value green" id="stat-latency">—</div>
+    </div>
+  </div>
+
+  <div class="panel-label">Event Log</div>
+
+  <div id="event-log">
+    <div class="log-header">
+      <span>Time</span>
+      <span>Event</span>
+      <span>Customer</span>
+      <span>Product</span>
+      <span>Status</span>
+      <span>ID</span>
+    </div>
+    <div class="log-rows" id="log-rows">
+      <div class="empty-state" id="empty-msg">
+        Waiting for events…
+      </div>
+    </div>
+  </div>
+
+  <div class="panel-label">Create a Test Order</div>
+  <div class="form-panel">
+    <div class="form-row">
+      <input id="inp-customer" type="text" placeholder="Customer name" value="Rohan Mehta" />
+      <input id="inp-product"  type="text" placeholder="Product name"  value="Mechanical Keyboard" />
+      <select id="inp-status">
+        <option value="pending">pending</option>
+        <option value="shipped">shipped</option>
+        <option value="delivered">delivered</option>
+      </select>
+      <button id="btn-create">Create Order</button>
+    </div>
+  </div>
+</main>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+  const API_BASE = `${location.protocol}//${location.host}/api/orders`;
+  const WS_URL   = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws/orders`;
+
+  // ── State ────────────────────────────────────────────────────────
+  let ws;
+  let reconnectDelay = 1000;
+  let eventCount  = 0;
+  let insertCount = 0;
+  let updateCount = 0;
+  let deleteCount = 0;
+  let latencies   = [];
+
+  // ── WebSocket with exponential-backoff reconnection ──────────────
+  function connect() {
+    setStatus('reconnecting', 'Connecting…');
+    ws = new WebSocket(WS_URL);
+
+    ws.onopen = () => {
+      reconnectDelay = 1000;
+      setStatus('connected', 'Connected');
+      toast('Connected to order feed');
+    };
+
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'connected') return; // ack frame
+      handleEvent(msg);
+    };
+
+    ws.onerror = () => {};
+
+    ws.onclose = () => {
+      setStatus('disconnected', `Reconnecting in ${(reconnectDelay / 1000).toFixed(0)}s…`);
+      setTimeout(connect, reconnectDelay);
+      reconnectDelay = Math.min(reconnectDelay * 2, 16000);
+    };
+  }
+
+  // ── Handle incoming change event ─────────────────────────────────
+  function handleEvent(msg) {
+    const { event, data, server_received_at } = msg;
+    if (!event || !data) return;
+
+    // Track latency (ms from DB NOTIFY pickup to client receipt)
+    if (server_received_at) {
+      const latencyMs = (Date.now() / 1000 - server_received_at) * 1000;
+      if (latencyMs < 5000) {   // ignore stale events from reconnects
+        latencies.push(latencyMs);
+        if (latencies.length > 50) latencies.shift();
+        const avg = latencies.reduce((a, b) => a + b, 0) / latencies.length;
+        document.getElementById('stat-latency').textContent = `${avg.toFixed(0)} ms`;
+      }
+    }
+
+    // Update counters
+    eventCount++;
+    if (event === 'INSERT') insertCount++;
+    else if (event === 'UPDATE') updateCount++;
+    else if (event === 'DELETE') deleteCount++;
+
+    document.getElementById('stat-total').textContent  = eventCount;
+    document.getElementById('stat-insert').textContent = insertCount;
+    document.getElementById('stat-update').textContent = updateCount;
+    document.getElementById('stat-delete').textContent = deleteCount;
+
+    // Remove empty-state placeholder
+    const empty = document.getElementById('empty-msg');
+    if (empty) empty.remove();
+
+    // Build row
+    const row = document.createElement('div');
+    row.className = `log-row new-${event.toLowerCase()}`;
+
+    const now = new Date();
+    const ts  = now.toTimeString().split(' ')[0];
+
+    const statusClass = event === 'DELETE'
+      ? 'status-deleted'
+      : `status-${data.status}`;
+
+    row.innerHTML = `
+      <span class="ts">${ts}</span>
+      <span><span class="badge badge-${event}">${event}</span></span>
+      <span>${escHtml(data.customer_name ?? '—')}</span>
+      <span>${escHtml(data.product_name  ?? '—')}</span>
+      <span class="${statusClass}">${escHtml(data.status ?? 'deleted')}</span>
+      <span class="ts">#${data.id}</span>
+    `;
+
+    const rows = document.getElementById('log-rows');
+    rows.prepend(row);
+
+    // Keep at most 200 rows in the DOM
+    while (rows.children.length > 200) rows.removeChild(rows.lastChild);
+
+    toast(`${event} — Order #${data.id} · ${data.status ?? 'deleted'}`);
+  }
+
+  // ── Create order ──────────────────────────────────────────────────
+  document.getElementById('btn-create').addEventListener('click', async () => {
+    const body = {
+      customer_name: document.getElementById('inp-customer').value.trim() || 'Anonymous',
+      product_name:  document.getElementById('inp-product').value.trim()  || 'Product',
+      status:        document.getElementById('inp-status').value,
+    };
+    try {
+      const res = await fetch(API_BASE + '/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(await res.text());
+    } catch (err) {
+      toast(`Error: ${err.message}`, true);
+    }
+  });
+
+  // ── Clear log ─────────────────────────────────────────────────────
+  document.getElementById('btn-clear').addEventListener('click', () => {
+    const rows = document.getElementById('log-rows');
+    rows.innerHTML = '<div class="empty-state" id="empty-msg">Waiting for events…</div>';
+    eventCount = insertCount = updateCount = deleteCount = 0;
+    latencies  = [];
+    document.getElementById('stat-total').textContent   = '0';
+    document.getElementById('stat-insert').textContent  = '0';
+    document.getElementById('stat-update').textContent  = '0';
+    document.getElementById('stat-delete').textContent  = '0';
+    document.getElementById('stat-latency').textContent = '—';
+  });
+
+  // ── Helpers ───────────────────────────────────────────────────────
+  function setStatus(state, text) {
+    document.getElementById('status-dot').className  = state;
+    document.getElementById('status-text').textContent = text;
+  }
+
+  function toast(message, isError = false) {
+    const container = document.getElementById('toast-container');
+    const el = document.createElement('div');
+    el.className = 'toast';
+    if (isError) el.style.borderLeftColor = 'var(--red)';
+    el.textContent = message;
+    container.appendChild(el);
+    setTimeout(() => el.remove(), 4200);
+  }
+
+  function escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  // ── Boot ──────────────────────────────────────────────────────────
+  connect();
+</script>
+</body>
+</html>
