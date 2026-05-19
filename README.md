@@ -1,3 +1,5 @@
+[![CI](https://github.com/Kushagra11Singh/Real-Time-Order-Notifier/actions/workflows/ci.yml/badge.svg)](https://github.com/Kushagra11Singh/Real-Time-Order-Notifier/actions/workflows/ci.yml)
+
 # Realtime Order Notifier
 
 A real-time system that automatically pushes database changes to connected clients **without polling**.
@@ -24,6 +26,7 @@ Average end-to-end latency: **~5–10ms locally**
 - Structured audit logging
 - Dockerized setup
 - Unit tests
+- GitHub Actions CI (syntax check → unit tests → integration tests)
 
 ---
 
@@ -289,6 +292,20 @@ Below is the live dashboard used to monitor real-time order activity:
 
 ![Realtime Dashboard](./assets/dashboard.png)
 ---
+
+## CI / Continuous Integration
+
+This project includes a GitHub Actions workflow that runs automatically on every push and pull request to `main`.
+
+The pipeline runs in three stages, each one gating the next:
+
+1. **Syntax Check** — every `.py` file in the project is compiled to verify there are no syntax errors or broken imports. This catches obvious mistakes instantly, with no infrastructure required.
+
+2. **Unit Tests** — the WebSocket `ConnectionManager` is tested in complete isolation using mock WebSocket objects. No database, no Redis, no running server. These tests cover connection lifecycle, filter logic, and broadcast routing — the core of the real-time delivery system.
+
+3. **Integration Tests** — GitHub spins up real PostgreSQL 16 and Redis 7 containers, applies the schema, starts the FastAPI server, and then runs the full REST API test suite against it. This is the same stack the app uses locally and in Docker — same trigger, same pub/sub path, same WebSocket server. The workflow also smoke-tests the `/ws/orders` WebSocket endpoint and the `/metrics` Prometheus endpoint to confirm the whole system comes up correctly.
+
+All three stages have to pass for the run to be green.
 
 ## Future Improvements
 
